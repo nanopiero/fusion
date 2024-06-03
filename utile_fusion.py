@@ -317,7 +317,8 @@ def point_gt(images, npoints=10):
   bs, nsteps, S, _ = images.shape
   flat_images = images.view(bs, nsteps, S * S)
   # Randomly sample M indices for each image in the batch
-  indices = torch.randint(0, S * S, (bs, npoints), device=images.device)
+  indices = torch.randint(0, S * S, (bs, npoints), \
+                          device=images.device)
 
   # Gather the values from these indices for all images
   sampled_values = torch.gather(flat_images, 2, indices.unsqueeze(dim=1).repeat([1,nsteps,1]))
@@ -343,8 +344,10 @@ def segment_gt(images, pairs, filters):
   bs, nsteps, S, _ = images.shape
   nanfilters = copy.deepcopy(filters)
   nanfilters[nanfilters == 0] = torch.nan
-  filtered_images = images.unsqueeze(dim=2) * nanfilters.unsqueeze(dim=1)
-  sampled_values = torch.nanmean(filtered_images, dim=(3,4))
+  filtered_images = images.unsqueeze(dim=2) * \
+                    nanfilters.unsqueeze(dim=1)
+  sampled_values = torch.nanmean(filtered_images,\
+                   dim=(3,4))
   result = torch.cat((pairs, sampled_values), dim=1)
   return result
 
@@ -363,7 +366,9 @@ def make_noisy_images(images):
     center_x = (kernel_size - central_square_size) // 2 + torch.randint(0, central_square_size, (nbatch,), device=images.device)
     center_y = (kernel_size - central_square_size) // 2 + torch.randint(0, central_square_size, (nbatch,), device=images.device)
 
-    x = torch.arange(kernel_size, dtype=torch.float32, device=images.device).repeat(nbatch, kernel_size, 1)
+    x = torch.arange(kernel_size, dtype=torch.float32, \
+                                  device=images.device)\
+                                  .repeat(nbatch, kernel_size, 1)
     y = x.transpose(1, 2)
 
     center_x = center_x.view(-1, 1, 1)
