@@ -11,7 +11,7 @@ import os
 import torch
 import torch.nn.functional as F
 import numpy as np
-import matplotib.pyplot as plt
+import matplotlib.pyplot as plt
 
 ##############################
 ########## with JIT ##########
