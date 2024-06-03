@@ -388,7 +388,8 @@ def make_noisy_images(images):
     noisy_images = F.conv2d(transposed_images, gaussian_kernel, padding='same') #, groups=nbatch)
     # print(noisy_images.shape)
     # Step 4: Binarize the output
-    threshold =  0.4 * torch.rand(1) #torch.finfo(torch.float32).eps  # Tiny threshold
+    threshold =  0.4 * torch.rand(1,\
+                       device=images.device) #torch.finfo(torch.float32).eps  # Tiny threshold
     print(threshold)
     binarized_images = (noisy_images > threshold).float()
 
