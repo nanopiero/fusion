@@ -399,6 +399,51 @@ def make_noisy_images(images):
     return final_images
 
 
+##############################
+########## Datasets ##########
+##############################
+
+from torch.utils.data import Dataset
+
+class FusionDataset(Dataset):
+    def __init__(self, length_dataset=6400, npairs=10, nsteps=60, ndiscs=5, size_image=64):
+        """
+        Args:
+              I need a pytorch dataset that will simply embed two numpy function that generates random tensors. 
+              These functions, called spatialized_gt and create_cmls_filter are @jit decorated.
+        """
+        
+        self.length_dataset = length_dataset
+        self.npairs = npairs
+        self.nsteps = nsteps
+        self.ndiscs = ndiscs
+        self.size_image = size_image
+
+    def __len__(self):
+        return self.length_dataset
+
+    def __getitem__(self, idx):
+        image = spatialized_gt(ndiscs=self.ndiscs, size=self.size_image, nsteps=self.nsteps)
+        pairs, filter = create_cmls_filter(S, npairs = self.npairs)
+
+        return image, pairs, filter
+
+
+"""
+%%timeit -r 2 -n 1
+# comparaison avec dataset pytorch : 3 fois plus lent si num_workers=4
+S = 64
+for i in range(100):
+  for i in range(64):
+    # in the dataset :
+    image = spatialized_gt(ndiscs=5, size=S, nsteps=60)
+    pairs, filter = create_cmls_filter(S, npairs = 10)
+
+
+%%timeit -r 2 -n 1
+for i, data in enumerate(loader):
+  pass
+"""
 
 
 ##############################
