@@ -390,7 +390,6 @@ def make_noisy_images(images):
     # Step 4: Binarize the output
     threshold =  0.4 * torch.rand(1,\
                        device=images.device) #torch.finfo(torch.float32).eps  # Tiny threshold
-    print(threshold)
     binarized_images = (noisy_images > threshold).float()
 
     # Step 5: Re-transpose the dimensions back to (nbatch, nchannels, S, S)
