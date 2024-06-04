@@ -379,7 +379,7 @@ def make_noisy_images(images):
     gaussian_kernel[gaussian_kernel < 0.1] = 0
     gaussian_kernel  /= gaussian_kernel.sum(dim=(1, 2), keepdim=True)
     gaussian_kernel  = gaussian_kernel.unsqueeze(0)
-    print('shape of gk:', gaussian_kernel.shape)
+
     # gaussian_kernel = gaussian_kernel.view(nbatch, 1, kernel_size, kernel_size)
 
     # Step 3: Apply the Gaussian kernel to all channels using conv2d
@@ -424,7 +424,7 @@ class FusionDataset(Dataset):
 
     def __getitem__(self, idx):
         image = spatialized_gt(ndiscs=self.ndiscs, size=self.size_image, nsteps=self.nsteps)
-        pairs, filter = create_cmls_filter(S, npairs = self.npairs)
+        pairs, filter = create_cmls_filter(self.size_image, npairs = self.npairs)
 
         return image, pairs, filter
 
