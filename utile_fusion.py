@@ -554,6 +554,152 @@ def plot_images(images, noisy_images, point_measurements, segment_measurements):
     plt.show()
 
 
+def plot_images_10pts_20seg(images, noisy_images, point_measurements, segment_measurements):
+    # Set up the figure with GridSpec
+    fig = plt.figure(figsize=(18, 24))
+    gs = gridspec.GridSpec(12, 7, width_ratios=[1, 1, 1, 1, 1, 1, 2])  # Last column twice as wide
+
+    # Manually create axes array for uniform handling as before
+    axs = [fig.add_subplot(gs[i, j]) for i in range(12) for j in range(7)]
+
+    # Hide all primary spines and ticks
+    for ax in axs:
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.tick_params(axis='both', which='both', left=False, right=False, top=False, bottom=False, labelleft=False, labelbottom=False)
+
+    # Image and noisy image plots
+    for i in range(12):
+        image_indices = [5*i, 5*i+1, 5*i+2, 5*i+3, 5*i+4, 5*i]
+        noisy_index = i
+        for j in range(6):
+            ax = axs[i*7 + j]
+            img = noisy_images[noisy_index] if j == 5 else images[image_indices[j]]
+            # img_normalized = (img - np.min(img)) / (np.max(img) - np.min(img) + 0.000001)
+            ax.imshow(img, cmap='gray', aspect='auto')
+            ax.axis('off')
+
+    # Point and Segment measurements plots
+    for row in range(12):
+        ax_main = axs[row * 7 + 6]  # Last column in each row
+        if row < 4:  # First four rows for point measurements
+            for idx in range(3) if row in [0,1,2] else range(1):
+                ax = ax_main.inset_axes([0, 1 - (idx+1)/3, 1, 1/3])
+                ax.plot(point_measurements[2:, idx + row*3], marker='.', markevery=(4, 5), markeredgewidth=2, markeredgecolor='black')
+                label = f"Pluvio {idx+1 + row*3}"
+                ax.set_ylim([-0.1, 1.5])
+                coord1 = f"x={point_measurements[0, idx + row*3]:.2f}"  # First coordinate on a new line
+                coord2 = f"y={point_measurements[1, idx + row*3]:.2f}"  # Second coordinate on another new line
+                full_label = f"{label}\n{coord1}\n{coord2}"  # Combine into one string with two newlines
+                ax.set_ylabel(full_label, rotation=0, labelpad=0, fontsize=6)
+                ax.yaxis.set_label_coords(0.05, 0.4)
+                ax.tick_params(axis='both', which='both', left=False, bottom=False, labelleft=False, labelbottom=False)
+                for spine in ax.spines.values():
+                    spine.set_visible(False)
+
+        elif 4 <= row < 11:  # Next 7 rows for segment measurements
+            for idx in range(3) if row in [4,5,6,7,8,9,10] else range(1):
+                actual_idx = 3 * (row - 4) + idx
+                if actual_idx < 20:  # Ensure we don't exceed the 20 graphs
+                    ax = ax_main.inset_axes([0, 1 - (idx+1)/3, 1, 1/3])
+                    ax.plot(segment_measurements[4:, actual_idx], marker='.', markevery=(4, 5), markeredgewidth=1, markeredgecolor='black')
+                    ax.set_ylim([-0.1, 1.5])
+                    label = f"CML {actual_idx+1}"
+                    coord_text = f"x1={segment_measurements[0, actual_idx]:.2f}, y1={segment_measurements[1, actual_idx]:.2f}\nx2={segment_measurements[2, actual_idx]:.2f}, y2={segment_measurements[3, actual_idx]:.2f}"
+                    full_label = f"{label}\n{coord_text}"
+                    ax.set_ylabel(full_label, rotation=0, labelpad=0, fontsize=6)
+                    ax.yaxis.set_label_coords(0.05, 0.4)
+                    ax.tick_params(axis='both', which='both', left=False, bottom=False, labelleft=False, labelbottom=False)
+                    for spine in ax.spines.values():
+                        spine.set_visible(False)
+    # plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, hspace=0.1, wspace=0.05)  # Adjust overall spacing
+
+    plt.tight_layout()
+    plt.show()
+
+
+
+
+
+
+
+
+
+def plot_results_10pts_20seg(images, noisy_images, point_measurements, segment_measurements, images_pred, images_pred_5min_mask, point_measurements_pred, segment_measurements_pred):
+    # Set up the figure with GridSpec
+    fig = plt.figure(figsize=(18, 48))
+    gs = gridspec.GridSpec(24, 7, width_ratios=[1, 1, 1, 1, 1, 1, 2])  # Last column twice as wide
+
+    # Manually create axes array for uniform handling as before
+    axs = [fig.add_subplot(gs[i, j]) for i in range(24) for j in range(7)]
+
+    # Hide all primary spines and ticks
+    for ax in axs:
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.tick_params(axis='both', which='both', left=False, right=False, top=False, bottom=False, labelleft=False, labelbottom=False)
+
+    # Image and noisy image plots
+    for i in range(12):
+        image_indices = [5*i, 5*i+1, 5*i+2, 5*i+3, 5*i+4, 5*i]
+        noisy_index = i
+        for j in range(6):
+            ax = axs[i*14 + j]
+            img = noisy_images[noisy_index] if j == 5 else images[image_indices[j]]
+            img_normalized = (img - np.min(img)) / (np.max(img) - np.min(img) + 0.000001)
+            ax.imshow(img, cmap='gray', aspect='auto')
+            ax.axis('off')
+
+    # Outputs and masked output plots
+    for i in range(12):
+        image_indices = [5*i, 5*i+1, 5*i+2, 5*i+3, 5*i+4, 5*i]
+        noisy_index = i
+        for j in range(6):
+            ax = axs[7 + i*14 + j]
+            img = images_pred_5min_mask[noisy_index] if j == 5 else images_pred[image_indices[j]]
+            img_normalized = (img - np.min(img)) / (np.max(img) - np.min(img) + 0.000001)
+            ax.imshow(img, cmap='gray', aspect='auto')
+            ax.axis('off')
+
+    # Point and Segment measurements plots
+    for row in range(12):
+        ax_main = axs[row * 7 + 6]  # Last column in each row
+        if row < 4:  # First four rows for point measurements
+            for idx in range(3) if row in [0,1,2] else range(1):
+                ax = ax_main.inset_axes([0, 1 - (idx+1)/3, 1, 1/3])
+                ax.plot(point_measurements[2:, idx + row*3], marker='.', markevery=(4, 5), markeredgewidth=2, markeredgecolor='black')
+                ax.plot(point_measurements_pred[2:, idx + row*3], marker='.', markevery=(4, 5), markeredgewidth=2, markeredgecolor='black', color='red')
+                label = f"Pluvio {idx+1 + row*3}"
+                ax.set_ylim([-0.1, 1.5])
+                coord1 = f"x={point_measurements[0, idx + row*3]:.2f}"  # First coordinate on a new line
+                coord2 = f"y={point_measurements[1, idx + row*3]:.2f}"  # Second coordinate on another new line
+                full_label = f"{label}\n{coord1}\n{coord2}"  # Combine into one string with two newlines
+                ax.set_ylabel(full_label, rotation=0, labelpad=0, fontsize=6)
+                ax.yaxis.set_label_coords(0.05, 0.4)
+                ax.tick_params(axis='both', which='both', left=False, bottom=False, labelleft=False, labelbottom=False)
+                for spine in ax.spines.values():
+                    spine.set_visible(False)
+
+        elif 4 <= row < 11:  # Next 7 rows for segment measurements
+            for idx in range(3) if row in [4,5,6,7,8,9,10] else range(1):
+                actual_idx = 3 * (row - 4) + idx
+                if actual_idx < 20:  # Ensure we don't exceed the 20 graphs
+                    ax = ax_main.inset_axes([0, 1 - (idx+1)/3, 1, 1/3])
+                    ax.plot(segment_measurements[4:, actual_idx], marker='.', markevery=(4, 5), markeredgewidth=1, markeredgecolor='black')
+                    ax.plot(segment_measurements_pred[4:, actual_idx], marker='.', markevery=(4, 5), markeredgewidth=1, markeredgecolor='black',color='red')
+                    ax.set_ylim([-0.1, 1.5])
+                    label = f"CML {actual_idx+1}"
+                    coord_text = f"x1={segment_measurements[0, actual_idx]:.2f}, y1={segment_measurements[1, actual_idx]:.2f}\nx2={segment_measurements[2, actual_idx]:.2f}, y2={segment_measurements[3, actual_idx]:.2f}"
+                    full_label = f"{label}\n{coord_text}"
+                    ax.set_ylabel(full_label, rotation=0, labelpad=0, fontsize=6)
+                    ax.yaxis.set_label_coords(0.05, 0.4)
+                    ax.tick_params(axis='both', which='both', left=False, bottom=False, labelleft=False, labelbottom=False)
+                    for spine in ax.spines.values():
+                        spine.set_visible(False)
+    # plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, hspace=0.1, wspace=0.05)  # Adjust overall spacing
+
+    plt.tight_layout()
+    plt.show()
 
 ################################   UNet (parties)###############################
 import torch
@@ -692,13 +838,8 @@ def segment_gt(images, pairs, filters, use_fcn=False):
   return segment_measurements, filters
 
 
-def point_gt(images, npoints=10, use_fcn=False):
+def generate_indices_rows_and_columns(images, npoints):
   bs, nsteps, S, _ = images.shape
-  flat_images = images.view(bs, nsteps, S * S)
-  # Randomly sample M indices for each image in the batch
-  # indices = torch.randint(0, S * S, (bs, npoints), \
-  #                         device=images.device)
-  # pas de risque de superposition
   weights = torch.ones(S**2).expand(bs, -1).to(images.device)
   indices = torch.multinomial(weights, num_samples=npoints, replacement=False) #.to(images.device)
 
@@ -708,21 +849,46 @@ def point_gt(images, npoints=10, use_fcn=False):
 
   # Gather the values from these indices for all images
   indices = indices.unsqueeze(dim=1).repeat([1,nsteps,1])
+  return indices, rows, cols
+
+
+
+def indices_to_sampled_values(images, indices):
+  bs, nsteps, S, _ = images.shape
+  flat_images = images.view(bs, nsteps, S * S)
+
+  # Gather the values from these indices for all images
   sampled_values = torch.gather(flat_images, 2, indices)
+  return sampled_values
 
 
+
+
+def get_point_measurements(rows, cols, sampled_values, S=64):
   # Normalize coordinates to be between 0 and 1
   ys = (1 - rows.float()/S) - 1/(2*S)
   xs = cols.float()/S + 1/(2*S)
-  # print(normalized_rows.shape)
-  # print(sampled_values.shape)
+
   # Stack the normalized coordinates with the values
   point_measurements = torch.cat((xs.unsqueeze(1),
                       ys.unsqueeze(1),
                       sampled_values), dim=1)
+  return point_measurements
+
+
+
+
+
+def point_gt(images, npoints=10, use_fcn=False):
+  bs, nsteps, S, _ = images.shape
+
+  indices, rows, cols = generate_indices_rows_and_columns(images, npoints)
+
+  sampled_values = indices_to_sampled_values(images, indices)
+  point_measurements = get_point_measurements(rows, cols, sampled_values, S)
   
   if not use_fcn:
-    return point_measurements, None
+    return point_measurements, None, (indices, rows, cols)
 
   else:
     # Difference with point_gt:
@@ -737,9 +903,8 @@ def point_gt(images, npoints=10, use_fcn=False):
     point_measurements_fcn[idx_ijkl.flatten()] = sampled_values.flatten()
 
     point_measurements_fcn = point_measurements_fcn.view(bs, nsteps, S, S)
-  return point_measurements, point_measurements_fcn
 
-
+    return point_measurements, point_measurements_fcn, (indices, rows, cols)
 
 """
 # Test code point_gt avec use_fcn
