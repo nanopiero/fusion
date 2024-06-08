@@ -313,6 +313,9 @@ def create_cmls_filter(S, npairs = 10):
 ##############################
 ########## on GPU   ##########
 ##############################
+"""
+# Anciennes versions
+
 def point_gt(images, npoints=10):
   bs, nsteps, S, _ = images.shape
   flat_images = images.view(bs, nsteps, S * S)
@@ -350,6 +353,7 @@ def segment_gt(images, pairs, filters):
                    dim=(3,4))
   result = torch.cat((pairs, sampled_values), dim=1)
   return result
+"""
 
 def make_noisy_images(images):
     nbatch, nchannels, S, _ = images.shape
@@ -548,3 +552,351 @@ def plot_images(images, noisy_images, point_measurements, segment_measurements):
 
     plt.tight_layout()
     plt.show()
+
+
+
+################################   UNet (parties)###############################
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class double_conv(nn.Module):
+    '''(conv => BN => ReLU) * 2'''
+    def __init__(self, in_ch, out_ch):
+        super(double_conv, self).__init__()
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_ch, out_ch, 3, padding=1),
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_ch, out_ch, 3, padding=1),
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x):
+        x = self.conv(x)
+        return x
+
+class inconv(nn.Module):
+    def __init__(self, in_ch, out_ch):
+        super(inconv, self).__init__()
+        self.conv = double_conv(in_ch, out_ch)
+
+    def forward(self, x):
+        x = self.conv(x)
+        return x
+
+class Down(nn.Module):
+    def __init__(self, in_ch, out_ch):
+        super(Down, self).__init__()
+        self.mpconv = nn.Sequential(
+            nn.MaxPool2d(2),
+            double_conv(in_ch, out_ch)
+        )
+
+    def forward(self, x):
+        x = self.mpconv(x)
+        return x
+
+
+
+class Up(nn.Module):
+    def __init__(self, in_ch, out_ch, bilinear=False):
+        super(Up, self).__init__()
+        if bilinear:
+            self.up = nn.Upsample(scale_factor=2, mode='bilinear')
+        else:
+            self.up = nn.ConvTranspose2d(in_ch, in_ch, kernel_size=2, stride=2)
+
+        self.conv = double_conv(2*in_ch, out_ch)
+
+    def forward(self, x1, x2):
+        x1 = self.up(x1)
+        diffX = x1.size()[2] - x2.size()[2]
+        diffY = x1.size()[3] - x2.size()[3]
+        x2 = F.pad(x2, (diffX // 2, int(diffX / 2),
+                        diffY // 2, int(diffY / 2)))
+        x = torch.cat([x2, x1], dim=1)
+        x = self.conv(x)
+        return x
+
+
+class outconv(nn.Module):
+    def __init__(self, in_ch, out_ch):
+        super(outconv, self).__init__()
+        self.conv = nn.Conv2d(in_ch, out_ch, 1)
+
+
+    def forward(self, x):
+        x = self.conv(x)
+        return x
+
+
+################################################################################
+########################################   Mini Unet  ##########################
+
+class UNet(nn.Module):
+    def __init__(self, n_channels, n_classes,size=64):
+        super(UNet, self).__init__()
+        self.inc = inconv(n_channels, size)
+        self.down1 = Down(size, 2*size)
+        self.down2 = Down(2*size, 4*size)
+        self.down3 = Down(4*size, 8*size)
+        self.down4 = Down(8*size, 8*size)
+        self.up1 = Up(8*size, 4*size)
+        self.up2 = Up(4*size, 2*size)
+        self.up3 = Up(2*size, size)
+        self.up4 = Up(size, size)
+        self.outc = outconv(size, n_classes)
+        self.outc2 = outconv(size, n_classes)
+        self.n_classes=n_classes
+        self.p = nn.Parameter(torch.ones(2))
+
+    def forward(self, x):
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+        x = self.up1(x5, x4)
+        x = self.up2(x, x3)
+        x = self.up3(x, x2)
+        x = self.up4(x, x1)
+        x = self.outc(x)
+        return   x
+
+
+
+
+
+def segment_gt(images, pairs, filters, use_fcn=False):
+  bs, nsteps, S, _ = images.shape
+  _, nlinks, _, _ = filters.shape
+
+  filters[filters == 0] = torch.nan
+  filtered_images = images.unsqueeze(dim=2) * \
+                    filters.unsqueeze(dim=1)
+  # on ajoute 0.1 pour distinguer du cas == 0
+  sampled_values = torch.nanmean(filtered_images,\
+                    dim=(3,4)) 
+  segment_measurements = torch.cat((pairs, sampled_values), dim=1)
+  filters[filters != filters] = 0
+
+  if not use_fcn:
+    return segment_measurements, None
+  else:
+    sampled_values += 0.1
+    filters = filters.unsqueeze(1)
+    filters = filters * sampled_values.view(bs, nsteps, nlinks, 1, 1)
+    filters = filters.sum(dim=2)
+  return segment_measurements, filters
+
+
+def point_gt(images, npoints=10, use_fcn=False):
+  bs, nsteps, S, _ = images.shape
+  flat_images = images.view(bs, nsteps, S * S)
+  # Randomly sample M indices for each image in the batch
+  # indices = torch.randint(0, S * S, (bs, npoints), \
+  #                         device=images.device)
+  # pas de risque de superposition
+  weights = torch.ones(S**2).expand(bs, -1).to(images.device)
+  indices = torch.multinomial(weights, num_samples=npoints, replacement=False) #.to(images.device)
+
+  # Calculate coordinates from indices
+  rows = indices // S
+  cols = indices % S
+
+  # Gather the values from these indices for all images
+  indices = indices.unsqueeze(dim=1).repeat([1,nsteps,1])
+  sampled_values = torch.gather(flat_images, 2, indices)
+
+
+  # Normalize coordinates to be between 0 and 1
+  ys = (1 - rows.float()/S) - 1/(2*S)
+  xs = cols.float()/S + 1/(2*S)
+  # print(normalized_rows.shape)
+  # print(sampled_values.shape)
+  # Stack the normalized coordinates with the values
+  point_measurements = torch.cat((xs.unsqueeze(1),
+                      ys.unsqueeze(1),
+                      sampled_values), dim=1)
+  
+  if not use_fcn:
+    return point_measurements, None
+
+  else:
+    # Difference with point_gt:
+    point_measurements_fcn = -0.1 * torch.ones(images.numel()).to(device)
+    indices_batch = torch.arange(bs).repeat(60)
+    # indice du premier élément de la i ème image pour le premier time step dans images.flatten()
+    idx_i000=(torch.arange(bs, device = images.device) * nsteps).view(bs,1).expand(bs,nsteps)
+    # indices du premier élément de la i ème image pour le premier time step j dans images.flatten()
+    idx_ij00=idx_i000 + torch.arange(nsteps, device = images.device).view(1,nsteps).expand(bs,nsteps)
+    # indices à conserver :
+    idx_ijkl = S**2 * idx_ij00.unsqueeze(-1) + indices 
+    point_measurements_fcn[idx_ijkl.flatten()] = sampled_values.flatten()
+
+    point_measurements_fcn = point_measurements_fcn.view(bs, nsteps, S, S)
+  return point_measurements, point_measurements_fcn
+
+
+
+"""
+# Test code point_gt avec use_fcn
+bs = 3
+S = 5
+npoints = 2
+nsteps = 7
+
+images = (torch.rand(bs, nsteps, S, S) > 0.5) + (torch.rand(bs, nsteps, S, S) > 0.5)
+images = images.float().to('cuda:0')
+
+
+bs, nsteps, S, _ = images.shape
+flat_images = images.view(bs, nsteps, S * S)
+# Randomly sample M indices for each image in the batch
+indices = torch.randint(0, S * S, (bs, npoints), \
+                        device=images.device)
+
+weights = torch.ones(S**2).expand(bs, -1)
+indices = torch.multinomial(weights, num_samples=npoints, replacement=False).to(images.device)
+indices = indices.unsqueeze(dim=1).repeat([1,nsteps,1])
+
+# Gather the values from these indices for all images
+sampled_values = torch.gather(flat_images, 2, indices)
+print(sampled_values.shape)
+
+
+point_measurements = -0.1 * torch.ones(images.numel()).to(device)
+indices_batch = torch.arange(bs).repeat(60)
+# indice du premier élément de la i ème image pour le premier time step dans images.flatten()
+idx_i000=(torch.arange(bs, device = images.device) * nsteps).view(bs,1).expand(bs,nsteps)
+# indices du premier élément de la i ème image pour le premier time step j dans images.flatten()
+idx_ij00=idx_i000 + torch.arange(nsteps, device = images.device).view(1,nsteps).expand(bs,nsteps)
+# indices à conserver :
+idx_ijkl = S**2 * idx_ij00.unsqueeze(-1) + indices 
+point_measurements[idx_ijkl.flatten()] = sampled_values.flatten()
+
+point_measurements = point_measurements.view(bs, nsteps, S, S)
+"""
+
+def make_noisy_images(images):
+    nbatch, nchannels, S, _ = images.shape
+
+    # Step 1: Extract channels n°5 to 60, with a step of 5 (12 channels)
+    extracted_images = images[:, torch.arange(4, 60, 5), :, :]  # Selects the 5th, 10th, ..., 60th channels
+
+    # Step 2: Build a 25 x 25 Gaussian kernel with random std in [0,5]
+    # and center taken in a random place around the square center (5 pixels max)
+    kernel_size = 25
+    central_square_size = 7
+    std = torch.rand(nbatch, device=images.device) * 2.5
+
+    center_x = (kernel_size - central_square_size) // 2 + torch.randint(0, central_square_size, (nbatch,), device=images.device)
+    center_y = (kernel_size - central_square_size) // 2 + torch.randint(0, central_square_size, (nbatch,), device=images.device)
+
+    x = torch.arange(kernel_size, dtype=torch.float32, \
+                                  device=images.device)\
+                                  .repeat(nbatch, kernel_size, 1)
+    y = x.transpose(1, 2)
+
+    center_x = center_x.view(-1, 1, 1)
+    center_y = center_y.view(-1, 1, 1)
+    std = std.view(-1, 1, 1)
+
+    gaussian_kernel = torch.exp(-((x - center_x) ** 2 + (y - center_y) ** 2) / (2 * std ** 2))
+    gaussian_kernel[gaussian_kernel < 0.1] = 0
+    gaussian_kernel  /= gaussian_kernel.sum(dim=(1, 2), keepdim=True)
+    gaussian_kernel  = gaussian_kernel.unsqueeze(1)
+
+    # gaussian_kernel = gaussian_kernel.view(nbatch, 1, kernel_size, kernel_size)
+
+    # Step 3: Apply the Gaussian kernel to all channels using conv2d
+    transposed_images = extracted_images.permute(1, 0, 2, 3)  # (12, nbatch, S, S)
+    noisy_images = F.conv2d(transposed_images, gaussian_kernel, padding='same', groups=nbatch)
+    # print(noisy_images.shape)
+    # Step 4: Binarize the output
+    threshold =  0.4 * torch.rand(1,\
+                       device=images.device) #torch.finfo(torch.float32).eps  # Tiny threshold
+    binarized_images = (noisy_images > threshold).float()
+
+    # Step 5: Re-transpose the dimensions back to (nbatch, nchannels, S, S)
+    final_images = binarized_images.permute(1, 0, 2, 3)  # (nbatch, 12, S, S)
+
+    return final_images
+
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from sklearn.metrics import confusion_matrix
+
+class QPELoss_fcn(nn.Module):
+    def __init__(self):
+        super(QPELoss_fcn, self).__init__()
+        self.regression_loss = nn.MSELoss()
+        self.segmentation_loss = nn.CrossEntropyLoss()
+
+    def forward(self, p, outputs, targets):
+
+      # sans supervision imparfaite, avec spatialisation
+      
+      bs, nsteps, S, _ = targets.shape
+      targets = targets.view(bs, 1, nsteps, S**2)
+      mask = (targets>=0)
+      masked_targets = targets[mask]
+      outputs_rnr0 = outputs[:, :nsteps, ...].view(bs, 1, nsteps, S**2)
+      outputs_rnr1 = outputs[:, nsteps:2*nsteps, ...].view(bs, 1, nsteps, S**2)
+      masked_output_rnr = torch.cat([outputs_rnr0[mask].view(bs, 1, -1), outputs_rnr1[mask].view(bs, 1, -1)], dim=1)
+      masked_target_rnr =  (masked_targets > 0).long().view(bs, -1)
+
+      masked_output_qpe = outputs[:, 2*nsteps:3*nsteps , ...]\
+                                .view(bs, 1, nsteps, S**2)[mask]\
+                                 [masked_targets > 0]
+      masked_target_qpe = masked_targets[masked_targets > 0]
+
+
+      loss_rnr = self.segmentation_loss(masked_output_rnr, masked_target_rnr)
+
+
+
+      loss_qpe_1min = self.regression_loss(masked_output_qpe, masked_target_qpe)
+
+      loss = 1/(2*p[0]**2) * loss_qpe_1min + 1/(2*p[1]**2) * loss_rnr
+      loss+= torch.log(1+p[0]**2+p[1]**2)
+
+      with torch.no_grad():
+        preds = masked_output_rnr.argmax(dim=1).flatten().cpu().numpy()
+        targets = masked_target_rnr.flatten().cpu().numpy()
+        # Compute the confusion matrix
+        cm = confusion_matrix(targets, preds, labels=np.arange(2)) 
+      # loss_qpe_5min =
+      # loss_qpe_1h =
+      # loss_fusion1 = 
+
+      # avec supervision imparfaite + spatialisation
+
+
+      # avec supervision imparfaite + spatialisation + denoinsing
+
+      # avec supervision imparfaite + spatialisation + denoising + GAN
+
+
+
+      return loss_qpe_1min.item(), loss_rnr.detach().item(), loss, cm 
+
+      
+def compute_metrics(confusion_matrix):
+    tp = confusion_matrix[1, 1]
+    tn = confusion_matrix[0, 0]
+    fp = confusion_matrix[0, 1]
+    fn = confusion_matrix[1, 0]
+
+    accuracy = (tp + tn) / (tp + tn + fp + fn)
+    csi = tp / (tp + fn + fp) if (tp + fn + fp) > 0 else 0
+    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+    false_alarm_ratio = fp / (tp + fp) if (tp + fp) > 0 else 0
+
+    return accuracy, csi, sensitivity, specificity, false_alarm_ratio
+
