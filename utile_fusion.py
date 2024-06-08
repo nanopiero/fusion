@@ -353,7 +353,7 @@ def segment_gt(images, pairs, filters):
                    dim=(3,4))
   result = torch.cat((pairs, sampled_values), dim=1)
   return result
-"""
+
 
 def make_noisy_images(images):
     nbatch, nchannels, S, _ = images.shape
@@ -400,7 +400,7 @@ def make_noisy_images(images):
     final_images = binarized_images.permute(1, 0, 2, 3)  # (nbatch, 12, S, S)
 
     return final_images
-
+"""
 
 ##############################
 ########## Datasets ##########
@@ -726,7 +726,7 @@ def point_gt(images, npoints=10, use_fcn=False):
 
   else:
     # Difference with point_gt:
-    point_measurements_fcn = -0.1 * torch.ones(images.numel()).to(device)
+    point_measurements_fcn = -0.1 * torch.ones(images.numel(), device=images.device)
     indices_batch = torch.arange(bs).repeat(60)
     # indice du premier élément de la i ème image pour le premier time step dans images.flatten()
     idx_i000=(torch.arange(bs, device = images.device) * nsteps).view(bs,1).expand(bs,nsteps)
