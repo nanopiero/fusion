@@ -796,7 +796,7 @@ class UNet(nn.Module):
         self.outc = outconv(size, n_classes)
         self.outc2 = outconv(size, n_classes)
         self.n_classes=n_classes
-        self.p = nn.Parameter(torch.ones(2))
+        self.p = nn.Parameter(torch.ones(16))
 
     def forward(self, x):
         x1 = self.inc(x)
