@@ -782,7 +782,7 @@ class outconv(nn.Module):
 ########################################   Mini Unet  ##########################
 
 class UNet(nn.Module):
-    def __init__(self, n_channels, n_classes,size=64):
+    def __init__(self, n_channels, n_classes,size=64, nb_additional_parameters=2):
         super(UNet, self).__init__()
         self.inc = inconv(n_channels, size)
         self.down1 = Down(size, 2*size)
@@ -796,7 +796,7 @@ class UNet(nn.Module):
         self.outc = outconv(size, n_classes)
         self.outc2 = outconv(size, n_classes)
         self.n_classes=n_classes
-        self.p = nn.Parameter(torch.ones(16))
+        self.p = nn.Parameter(torch.ones(nb_additional_parameters))
 
     def forward(self, x):
         x1 = self.inc(x)
