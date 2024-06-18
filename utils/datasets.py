@@ -449,7 +449,6 @@ def point_gt(images, npoints=10, use_fcn=False, split=None): # nb_pluvios_ Split
       point_measurements_fcn = point_measurements_fcn.view(bs, nsteps, S, S)
 
       return point_measurements, point_measurements_fcn, (indices, rows, cols)
-      
   # splitting
   else:
     pos = 0
@@ -462,7 +461,7 @@ def point_gt(images, npoints=10, use_fcn=False, split=None): # nb_pluvios_ Split
 
       splitted_point_measurements.append((point_measurements,
                                           None,
-                                          (indices[:,pos:pos + np], rows[:,pos:pos + np], cols[:, pos:pos + np])))
+                                          (indices[:, :, pos:pos + np], rows[:,pos:pos + np], cols[:, pos:pos + np])))
       pos += np
 
     if not use_fcn :
@@ -488,6 +487,7 @@ def point_gt(images, npoints=10, use_fcn=False, split=None): # nb_pluvios_ Split
 
         splitted_point_measurements_fcn.append((splitted_point_measurements[i][0], point_measurements_fcn.view(bs, nsteps, S, S),
                                                 (split_indices, rows[:,pos:pos + np], cols[:, pos:pos + np])))
+        pos += np
 
       return splitted_point_measurements_fcn
 
